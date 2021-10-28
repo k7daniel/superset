@@ -49,6 +49,10 @@ from superset.utils.encrypt import SQLAlchemyUtilsAdapter
 from superset.utils.log import DBEventLogger
 from superset.utils.logging_configurator import DefaultLoggingConfigurator
 
+from cachelib.redis import RedisCache
+
+RESULTS_BACKEND = RedisCache(host="localhost", port=6379, key_prefix="superset_results")
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -356,11 +360,11 @@ DEFAULT_FEATURE_FLAGS: Dict[str, bool] = {
     "PRESTO_EXPAND_DATA": False,
     # Exposes API endpoint to compute thumbnails
     "THUMBNAILS": False,
-    "DASHBOARD_CACHE": False,
+    "DASHBOARD_CACHE": True,
     "REMOVE_SLICE_LEVEL_LABEL_COLORS": False,
     "SHARE_QUERIES_VIA_KV_STORE": False,
     "TAGGING_SYSTEM": False,
-    "SQLLAB_BACKEND_PERSISTENCE": False,
+    "SQLLAB_BACKEND_PERSISTENCE": True,
     "LISTVIEWS_DEFAULT_CARD_VIEW": False,
     # Enables the replacement React views for all the FAB views (list, edit, show) with
     # designs introduced in https://github.com/apache/superset/issues/8976
@@ -372,12 +376,12 @@ DEFAULT_FEATURE_FLAGS: Dict[str, bool] = {
     # When True, this escapes HTML (rather than rendering it) in Markdown components
     "ESCAPE_MARKDOWN_HTML": False,
     "DASHBOARD_NATIVE_FILTERS": True,
-    "DASHBOARD_CROSS_FILTERS": False,
+    "DASHBOARD_CROSS_FILTERS": True,
     # Feature is under active development and breaking changes are expected
-    "DASHBOARD_NATIVE_FILTERS_SET": False,
-    "DASHBOARD_FILTERS_EXPERIMENTAL": False,
+    "DASHBOARD_NATIVE_FILTERS_SET": True,
+    "DASHBOARD_FILTERS_EXPERIMENTAL": True,
     "GLOBAL_ASYNC_QUERIES": False,
-    "VERSIONED_EXPORT": False,
+    "VERSIONED_EXPORT": True,
     # Note that: RowLevelSecurityFilter is only given by default to the Admin role
     # and the Admin Role does have the all_datasources security permission.
     # But, if users create a specific role with access to RowLevelSecurityFilter MVC
@@ -387,7 +391,7 @@ DEFAULT_FEATURE_FLAGS: Dict[str, bool] = {
     # tables that users do not have access to.
     "ROW_LEVEL_SECURITY": True,
     # Enables Alerts and reports new implementation
-    "ALERT_REPORTS": False,
+    "ALERT_REPORTS": True,
     # Enable experimental feature to search for other dashboards
     "OMNIBAR": False,
     "DASHBOARD_RBAC": False,
@@ -554,10 +558,20 @@ IMG_UPLOAD_URL = "/static/uploads/"
 CACHE_DEFAULT_TIMEOUT = int(timedelta(days=1).total_seconds())
 
 # Default cache for Superset objects
-CACHE_CONFIG: CacheConfig = {"CACHE_TYPE": "null"}
+CACHE_CONFIG: CacheConfig = {
+    "CACHE_TYPE": "RedisCache",
+    "CACHE_DEFAULT_TIMEOUT": 60 * 60 * 24,  # 1 day default (in secs)
+    "CACHE_KEY_PREFIX": "superset_objects",
+    "CACHE_REDIS_URL": "redis://localhost:6379/0",
+}
 
 # Cache for datasource metadata and query results
-DATA_CACHE_CONFIG: CacheConfig = {"CACHE_TYPE": "null"}
+DATA_CACHE_CONFIG: CacheConfig = {
+    "CACHE_TYPE": "RedisCache",
+    "CACHE_DEFAULT_TIMEOUT": 60 * 60 * 24,  # 1 day default (in secs)
+    "CACHE_KEY_PREFIX": "superset_results",
+    "CACHE_REDIS_URL": "redis://localhost:6379/0",
+}
 
 # store cache keys by datasource UID (via CacheKey) for custom processing/invalidation
 STORE_CACHE_KEYS_IN_METADATA_DB = False
@@ -704,11 +718,11 @@ DASHBOARD_AUTO_REFRESH_MODE: Literal["fetch", "force"] = "force"
 
 
 class CeleryConfig:  # pylint: disable=too-few-public-methods
-    BROKER_URL = "sqla+sqlite:///celerydb.sqlite"
+    BROKER_URL = "redis://localhost:6379/0"
     CELERY_IMPORTS = ("superset.sql_lab", "superset.tasks")
-    CELERY_RESULT_BACKEND = "db+sqlite:///celery_results.sqlite"
+    CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
     CELERYD_LOG_LEVEL = "DEBUG"
-    CELERYD_PREFETCH_MULTIPLIER = 1
+    CELERYD_PREFETCH_MULTIPLIER = 10
     CELERY_ACKS_LATE = False
     CELERY_ANNOTATIONS = {
         "sql_lab.get_sql_results": {"rate_limit": "100/s"},
@@ -1220,7 +1234,7 @@ SQLA_TABLE_MUTATOR = lambda table: table
 # Requires GLOBAL_ASYNC_QUERIES feature flag to be enabled.
 GLOBAL_ASYNC_QUERIES_REDIS_CONFIG = {
     "port": 6379,
-    "host": "127.0.0.1",
+    "host": "localhost",
     "password": "",
     "db": 0,
     "ssl": False,
@@ -1231,7 +1245,7 @@ GLOBAL_ASYNC_QUERIES_REDIS_STREAM_LIMIT_FIREHOSE = 1000000
 GLOBAL_ASYNC_QUERIES_JWT_COOKIE_NAME = "async-token"
 GLOBAL_ASYNC_QUERIES_JWT_COOKIE_SECURE = False
 GLOBAL_ASYNC_QUERIES_JWT_COOKIE_DOMAIN = None
-GLOBAL_ASYNC_QUERIES_JWT_SECRET = "test-secret-change-me"
+GLOBAL_ASYNC_QUERIES_JWT_SECRET = "eyJhbGciOiJIUzI1NiJ9.eyJSb2xlIjoiQWRtaW4iLCJJc3N1ZXIiOiJJc3N1ZXIiLCJVc2VybmFtZSI6IkphdmFJblVzZSIsImV4cCI6MTYzNTQyODY4NCwiaWF0IjoxNjM1NDI4Njg0fQ.OTLg2pJ71zuNir8q_1DA8v5Jpl_3cg_TqgweSu30bXM"
 GLOBAL_ASYNC_QUERIES_TRANSPORT = "polling"
 GLOBAL_ASYNC_QUERIES_POLLING_DELAY = int(
     timedelta(milliseconds=500).total_seconds() * 1000
